@@ -7,6 +7,10 @@ html {
   font-family: 'Open Sans', sans-serif;
 }
 
+:root {
+  --text-size: 50px;
+}
+
 body {
   --margin: 15px;
   --padding: 15px;
@@ -34,6 +38,7 @@ body {
   margin: 0 var(--horizontal-margin) 0 var(--horizontal-margin);
   width: calc(100% - 2 * var(--horizontal-margin) - var(--left-width));
   overflow-x: hidden;
+  overflow-y: hidden;
 }
 
 .art-container {
@@ -50,7 +55,32 @@ body {
   border-radius: 20px;
 }
 
-h1 {
-  white-space: nowrap;
+.title-container, .artist-container {
+  position: relative;
 }
 
+.scrollable {
+  white-space: nowrap;
+  position: absolute;
+  width: 100%;
+}
+
+.title-container {
+  height: 55%;
+}
+
+h1 {
+  margin: 1% 0px;
+  font-size: var(--text-size);
+  font-weight: 700;
+}
+
+h2 {
+  margin: 1% 0px;
+  font-size: calc(var(--text-size) * 0.66);
+  font-weight: 300;
+}
+
+.scrollback {
+  margin-left: 100%;
+}
