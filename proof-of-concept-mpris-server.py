@@ -17,6 +17,22 @@ interface = dbus.Interface(media_player, "org.freedesktop.DBus.Properties")
 # Handles HTTP requests
 class RequestHandler(http.server.BaseHTTPRequestHandler):
   def do_GET(self):
+    # Request is for one of the code files
+    if self.path == "/script.js" or self.path == "/ui.html" or self.path == "/style.css":
+      self.send_response(200)
+      if self.path == "/script.js":
+        self.send_header("Content-Type", "application/javascript")
+      elif self.path == "/ui.html":
+        self.send_header("Content-Type", "text/html")
+      elif self.path == "/style.css":
+        self.send_header("Content-Type", "text/css")
+      self.end_headers()
+
+      with open(self.path[1:], "rb") as f:
+        self.wfile.write(f.read())
+
+    # Request is for song data
+    elif self.path == "/get-song-info":
     #with info_lock:
       metadata = interface.Get("org.mpris.MediaPlayer2.Player", "Metadata")
       info["title"] = str(metadata.get("xesam:title"))
@@ -43,6 +59,12 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
       self.send_header("Content-Type", "text/json")
       self.end_headers()
       self.wfile.write(json_encoded.encode("utf-8"))
+
+    # Request is invalid
+    else:
+      self.send_response(404)
+      self.end_headers()
+
 
 with http.server.HTTPServer(('127.0.0.1', PORT), RequestHandler) as server:
   print("Listening at", PORT)
