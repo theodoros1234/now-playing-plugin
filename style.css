@@ -50,7 +50,8 @@ body {
 }
 
 .art {
-  background-color: orange;
+  background-size: cover;
+  background-position: center;
   width: 100%;
   height: 100%;
   border-radius: 20px;
