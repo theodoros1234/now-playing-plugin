@@ -32,7 +32,7 @@ window.addEventListener("load", init);
 
 // Gets song info from server
 function getSongInfo() {
-  http_handler.open("GET", "http://localhost:6969/get-song-info");
+  http_handler.open("GET", "get-song-info");
   http_handler.onload = receiveSongInfo;
   http_handler.send();
 }
