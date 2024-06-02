@@ -1,14 +1,15 @@
 #!/bin/python3
-import dbus, json, http.server, mimetypes, time, threading, os
+import dbus, json, http.server, mimetypes, time, threading, os, requests
 from threading import Condition
 
 PORT = 6969
 REQUEST_TIMEOUT = 20  # seconds
 POLLING_INTERVAL = 1  # seconds
 
-# Information dictionaries
-info = {"title": "", "artist": "", "art_url": "", "timestamp": "0"}
+# Song info
+info = {"title": "", "artist": "", "timestamp": "0"}
 info_lock = Condition();
+artwork = [b"", ""]
 
 stopping = False
 
@@ -67,6 +68,21 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json_encoded.encode("utf-8"))
 
+    # Request is for song artwork
+    elif self.path == "/get-song-artwork":
+      response_image = None
+      response_mimetype = None
+      # Grab artwork
+      with info_lock:
+        response_image = artwork[0]
+        response_mimetype = artwork[1]
+      # Send data back to client
+      self.send_response(200)
+      self.send_header("Content-Type", response_mimetype)
+      self.end_headers()
+      self.wfile.write(response_image)
+
+
     # Request is invalid
     else:
       self.send_response(404)
@@ -83,12 +99,12 @@ def mprisWatcher():
     # Parse metadata
     new_title = ""
     new_artist = ""
-    new_art_url = ""
+    art_url = ""
     # Anything not set becomes an empty string
     if metadata.get("xesam:title") != None:
       new_title = str(metadata.get("xesam:title"))
     if metadata.get("mpris:artUrl") != None:
-      new_art_url = str(metadata.get("mpris:artUrl"))
+      art_url = str(metadata.get("mpris:artUrl"))
     artist_list = metadata.get("xesam:artist")
     # Concatenate all artists into one string
     if artist_list != None:
@@ -100,26 +116,57 @@ def mprisWatcher():
     # Check if song info has changed
     with info_lock:
       if new_title != info["title"] or \
-        new_artist != info["artist"] or \
-        new_art_url != info["art_url"]:
+        new_artist != info["artist"]:
             # When it changes, update it with the new info
             info["title"] = new_title
             info["artist"] = new_artist
-            info["art_url"] = new_art_url
             info["timestamp"] = str(time.time_ns())
             # NOTE: Timestamp is stored as a string, due to client's JS int limitations
             # Print new info to console
             print()
             print("Title:", info["title"])
             print("Artist:", info["artist"])
-            print("Album art URL:", info["art_url"])
+            print("Album art URL:", art_url)
             print()
+            # Download new artwork (if it exists)
+            if (art_url == ""):
+              artwork[0], artwork[1] = [b"", ""]
+            else:
+              artwork[0], artwork[1] = getImage(art_url)
             # Wake up HTTP threads waiting
             info_lock.notify_all()
 
     # Wait 1s before continuing
     time.sleep(POLLING_INTERVAL)
 
+# Reads or downloads an image and returns tuple with binary data and mime type
+def getImage(uri):
+  # Determine URI protocol
+  if uri[:7] == "http://" or uri[:8] == "https://":
+    # HTTP/HTTPS
+    response = requests.get(uri)
+    if (response.status_code == 200):
+      # Successful request, returns data and mime type
+      return [response.content, response.headers['Content-Type']]
+    else:
+      # Error, returns empty data
+      return [b"", ""]
+
+  elif uri[:7] == "file://":
+    # Local file
+    data = None
+    try:
+      with open(uri[7:], "rb") as f:
+        data = f.read()
+    except:
+      # Return blank data on error
+      return [b"", ""]
+    # Otherwise, return data and guessed mime type
+    return [data, mimetypes.guess_type(uri)]
+
+  else:
+    # Return blank data on unrecognized protocol
+    return [b"", ""]
 
 # Main
 if __name__ == "__main__":

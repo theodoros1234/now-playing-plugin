@@ -5,9 +5,9 @@ const css_root = document.querySelector(":root");
 var col_right;
 var text_size;
 // Song metadata
-var title="", artist="", art="", timestamp=null;
+var title="", artist="", timestamp=null;
 // Other objects
-var http_handler = new XMLHttpRequest, img_preloader = new XMLHttpRequest;
+var http_handler = new XMLHttpRequest, img_preloader = new XMLHttpRequest, img_blob = null;
 http_handler.onerror = function() {
   console.warn("Connection error, reconnecting in 5 seconds.");
   setTimeout(getSongInfo, 5000);
@@ -31,6 +31,13 @@ function init() {
 }
 window.addEventListener("load", init);
 
+// Cleans up when the page is closed
+function cleanup() {
+  if (img_blob != null)
+    URL.revokeObjectURL(img_blob);
+}
+window.addEventListener("close", cleanup);
+
 // Gets song info from server
 function getSongInfo() {
   // Include timestamp if we have it
@@ -49,14 +56,12 @@ function receiveSongInfo() {
       try {
         // Parse JSON data
         data = JSON.parse(this.responseText);
-        var old_art=art, old_title=title, old_artist=artist;
         title = data['title'];
         artist = data['artist'];
-        art = data['art_url'];
         timestamp = data['timestamp'];
 
         // Preload album art and update
-        img_preloader.open("GET", art);
+        img_preloader.open("GET", "get-song-artwork");
         img_preloader.send();
       } catch (error) {
         console.error("Could not parse server response, reconnecting in 5 seconds.");
@@ -87,7 +92,12 @@ function updateSongInfo() {
       element.innerHTML = artist;
     }
     for (let element of document.getElementsByClassName("art")) {
-      element.style.backgroundImage = 'url("' + URL.createObjectURL(this.response) + '")';
+      // Create blob from new image, and delete the old one.
+      old_img_blob = img_blob;
+      img_blob = URL.createObjectURL(this.response);
+      element.style.backgroundImage = 'url("' + img_blob + '")';
+      if (old_img_blob != null)
+        URL.revokeObjectURL(old_img_blob);
     }
   } catch (error) {
     console.error("Error updating UI.");
