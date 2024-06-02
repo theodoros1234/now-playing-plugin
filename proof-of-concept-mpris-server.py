@@ -53,11 +53,17 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
           json_encoded = json.dumps(info)
 
       # Send response
-      self.send_response(200)                                                   # Response: 200 OK
-      self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT)) # Deny other sites from snooping on our music
-      self.send_header("Content-Type", "text/json")                             # We're sending JSON
-      self.end_headers()
-      self.wfile.write(json_encoded.encode("utf-8"))
+      if json_encoded == None:  # Song hasn't changed
+        self.send_response(304)                                                         # Response: 304 Not Modified
+        self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our music
+        self.send_header("Content-Type", "text/json")                                   # We're sending JSON
+        self.end_headers()
+      else:                     # Song has changed
+        self.send_response(200)                                                         # Response: 200 OK
+        self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our music
+        self.send_header("Content-Type", "text/json")                                   # We're sending JSON
+        self.end_headers()
+        self.wfile.write(json_encoded.encode("utf-8"))
 
     # Request is invalid
     else:
