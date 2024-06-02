@@ -7,7 +7,7 @@ REQUEST_TIMEOUT = 20  # seconds
 POLLING_INTERVAL = 1  # seconds
 
 # Information dictionaries
-info = {"title": "", "artist": "", "art_url": "", "timestamp": 0}
+info = {"title": "", "artist": "", "art_url": "", "timestamp": "0"}
 info_lock = Condition();
 
 stopping = False
@@ -42,7 +42,9 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
       # Extract timestamp from URL, if it was specified and it's valid
       timestamp = None
       try:
-        timestamp = int(self.path[15:])
+        # Make sure the timestamp is a valid integer, but convert it back to a string afterwards.
+        # We're using a string due to the client's JS integer limitations.
+        timestamp = str(int(self.path[15:]))
       except:
         pass
 
@@ -104,7 +106,8 @@ def mprisWatcher():
             info["title"] = new_title
             info["artist"] = new_artist
             info["art_url"] = new_art_url
-            info["timestamp"] = time.time_ns()
+            info["timestamp"] = str(time.time_ns())
+            # NOTE: Timestamp is stored as a string, due to client's JS int limitations
             # Print new info to console
             print()
             print("Title:", info["title"])
