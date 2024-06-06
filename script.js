@@ -1,6 +1,7 @@
 const PORT = 6969;
 const TEXT_SCROLL_PAUSE_TIME = 4000;
 const TEXT_SCROLL_SPEED = 1.0;
+const TEXT_SCROLL_EDGEMASK_FADE_TIME = "250ms";
 
 // HTML elements and related data
 const css_root = document.querySelector(":root");
@@ -124,6 +125,7 @@ function updateSongInfo() {
 
 // Handles scrolling text UI elements that don't fit in the viewport
 class TextScroller {
+  #text_container = null;
   #main = null;
   #scrollback = null;
   #computed_style = null;
@@ -132,10 +134,12 @@ class TextScroller {
   #scroll_time = null;
   #needs_scroll = false;
   #currently_scrolling = false;
-  #timeout = null;
+  #pause_timeout = null;
+  #edgemask_timeout = null;
   pause_time = TEXT_SCROLL_PAUSE_TIME;
 
   constructor(text_container) {
+    this.#text_container = text_container;
     // Find main and scrollback elements
     for (var child of text_container.children) {
       if (child.classList.contains("scrollable")) {
@@ -183,12 +187,18 @@ class TextScroller {
         this.#setScrollAnimation();
       } else {
         // Stop scrolling if we no longer need to scroll
-        this.#currently_scrolling = false;
-        this.#resetScrollAnimation();
+        this.#resetScroll();
       }
-    } else if (this.#needs_scroll && this.#timeout === null) {
+    } else if (this.#needs_scroll && this.#pause_timeout === null) {
       // Enable scrolling again if we need to scroll and it was disabled
       this.animationEnded();
+    } else if (!this.#needs_scroll) {
+      this.#edgeMaskUnset();
+      if (this.#pause_timeout !== null) {
+        // Disable scrolling if we don't need to scroll and it was enabled (paused)
+        window.clearTimeout(this.#pause_timeout);
+        this.#pause_timeout = null;
+      }
     }
   }
 
@@ -202,19 +212,47 @@ class TextScroller {
     this.#scrollback.style.animation = "";
   }
 
+  #edgeMaskSetRight() {
+    this.#text_container.classList.remove("scroll-edgemask-both");
+    this.#text_container.classList.add("scroll-edgemask-right");
+    this.#text_container.style.animation = "";
+  }
+
+  #edgeMaskSetBoth() {
+    this.#text_container.classList.remove("scroll-edgemask-right");
+    this.#text_container.classList.add("scroll-edgemask-both");
+    this.#text_container.style.animation = TEXT_SCROLL_EDGEMASK_FADE_TIME + " linear scroll-edgemask-right-to-both";
+  }
+
+  #edgeMaskUnset() {
+    this.#text_container.classList.remove("scroll-edgemask-right");
+    this.#text_container.classList.remove("scroll-edgemask-both");
+    this.#text_container.style.animation = "";
+  }
+
   startScroll() {
     // Forget the timeout that called us
-    this.#timeout = null;
+    this.#pause_timeout = null;
     // If scrolling is still necessary, start scrolling
     if (this.#needs_scroll) {
       this.#currently_scrolling = true;
       this.#setScrollAnimation();
+      this.#edgeMaskSetBoth();
+      this.#edgemask_timeout = setTimeout(
+          () => this.#edgeMaskSetRight(),
+          (this.#scroll_width * 1000) / (this.#font_size * TEXT_SCROLL_SPEED)
+        );
     }
   }
 
-  resetScroll() {
+  #resetScroll() {
     this.#currently_scrolling = false;
     this.#resetScrollAnimation();
+    window.clearTimeout(this.#edgemask_timeout);
+  }
+
+  resetScroll() {
+    this.#resetScroll();
     this.resizeEvent();
   }
 
@@ -222,7 +260,11 @@ class TextScroller {
     this.#currently_scrolling = false;
     this.#resetScrollAnimation();
     // If scrolling is still necessary, pause and then scroll again
-    if (this.#needs_scroll)
-      this.#timeout = setTimeout(() => this.startScroll(), this.pause_time);
+    if (this.#needs_scroll) {
+      this.#edgeMaskSetRight();
+      this.#pause_timeout = setTimeout(() => this.startScroll(), this.pause_time);
+    } else {
+      this.#edgeMaskUnset();
+    }
   }
 }

@@ -35,6 +35,7 @@ body {
   --left-width: 154px;
   --horizontal-margin: 25px;
   margin: 0 0 0 var(--horizontal-margin);
+  padding: 0.5% 0px;
   width: calc(100%);
   overflow-x: hidden;
   overflow-y: hidden;
@@ -67,12 +68,16 @@ body {
 }
 
 .title-container {
-  height: 55%;
+  height: 60%;
+}
+
+.artist-container {
+  height: 40%;
 }
 
 h1 {
   --text-size-zoom: 1;
-  margin: 1% 0px;
+  margin: 0px;
   font-size: var(--text-size);
   font-weight: 700;
   text-shadow: black calc(var(--text-size) * 0.075) calc(var(--text-size) * 0.075) calc(var(--text-size) * 0.125);
@@ -80,7 +85,7 @@ h1 {
 
 h2 {
   --text-size-zoom: 0.66;
-  margin: 1% 0px;
+  margin: 0px;
   font-size: calc(var(--text-size) * var(--text-size-zoom));
   font-weight: 400;
   text-shadow: black calc(var(--text-size) * 0.0375) calc(var(--text-size) * 0.0375) calc(var(--text-size) * 0.075);
@@ -88,6 +93,20 @@ h2 {
 
 .scrollback {
   margin-left: calc(100% + var(--text-size));
+}
+
+.scroll-edgemask-right {
+  mask-mode: luminance;
+  mask-image: linear-gradient(to right, white 95%, black);
+  -webkit-mask-mode: luminance;
+  -webkit-mask-image: linear-gradient(to right, white 95%, black);
+}
+
+.scroll-edgemask-both {
+  mask-mode: luminance;
+  mask-image: linear-gradient(to right, black, white 5%, white 95%, black);
+  -webkit-mask-mode: luminance;
+  -webkit-mask-image: linear-gradient(to right, black, white 5%, white 95%, black);
 }
 
 @keyframes scroll-main {
@@ -106,4 +125,18 @@ h2 {
   to {
     margin-left: 0px;
   }
+}
+
+@keyframes scroll-edgemask-right-to-both {
+  0% {mask-image: linear-gradient(to right, #FFFFFF, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #FFFFFF, white 5%, white 95%, black);}
+  10% {mask-image: linear-gradient(to right, #E5E5E5, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #E5E5E5, white 5%, white 95%, black);}
+  20% {mask-image: linear-gradient(to right, #CCCCCC, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #CCCCCC, white 5%, white 95%, black);}
+  30% {mask-image: linear-gradient(to right, #B2B2B2, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #B2B2B2, white 5%, white 95%, black);}
+  40% {mask-image: linear-gradient(to right, #999999, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #999999, white 5%, white 95%, black);}
+  50% {mask-image: linear-gradient(to right, #7F7F7F, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #7F7F7F, white 5%, white 95%, black);}
+  60% {mask-image: linear-gradient(to right, #666666, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #666666, white 5%, white 95%, black);}
+  70% {mask-image: linear-gradient(to right, #4C4C4C, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #4C4C4C, white 5%, white 95%, black);}
+  80% {mask-image: linear-gradient(to right, #333333, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #333333, white 5%, white 95%, black);}
+  90% {mask-image: linear-gradient(to right, #191919, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #191919, white 5%, white 95%, black);}
+  100% {mask-image: linear-gradient(to right, #000000, white 5%, white 95%, black);-webkit-mask-image: linear-gradient(to right, #000000, white 5%, white 95%, black);}
 }
