@@ -4,7 +4,7 @@ from threading import Condition
 
 PORT = 6969
 REQUEST_TIMEOUT = 20  # seconds
-POLLING_INTERVAL = 1  # seconds
+POLLING_INTERVAL = 0.5  # seconds
 
 # Song info
 info = {"title": "", "artist": "", "timestamp": "0"}

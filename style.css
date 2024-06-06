@@ -33,10 +33,9 @@ body {
 
 .col-right {
   --left-width: 154px;
-  --horizontal-margin: 30px;
-  flex-direction: col;
-  margin: 0 var(--horizontal-margin) 0 var(--horizontal-margin);
-  width: calc(100% - 2 * var(--horizontal-margin) - var(--left-width));
+  --horizontal-margin: 25px;
+  margin: 0 0 0 var(--horizontal-margin);
+  width: calc(100%);
   overflow-x: hidden;
   overflow-y: hidden;
 }
@@ -72,6 +71,7 @@ body {
 }
 
 h1 {
+  --text-size-zoom: 1;
   margin: 1% 0px;
   font-size: var(--text-size);
   font-weight: 700;
@@ -79,12 +79,31 @@ h1 {
 }
 
 h2 {
+  --text-size-zoom: 0.66;
   margin: 1% 0px;
-  font-size: calc(var(--text-size) * 0.66);
+  font-size: calc(var(--text-size) * var(--text-size-zoom));
   font-weight: 400;
   text-shadow: black calc(var(--text-size) * 0.0375) calc(var(--text-size) * 0.0375) calc(var(--text-size) * 0.075);
 }
 
 .scrollback {
   margin-left: calc(100% + var(--text-size));
+}
+
+@keyframes scroll-main {
+  from {
+    margin-left: 0px;
+  }
+  to {
+    margin-left: calc(0px - var(--scrollback-amount) - 3 * var(--text-size));
+  }
+}
+
+@keyframes scroll-scrollback {
+  from {
+    margin-left: calc(var(--scrollback-amount) + 3 * var(--text-size) * var(--text-size-zoom));
+  }
+  to {
+    margin-left: 0px;
+  }
 }
