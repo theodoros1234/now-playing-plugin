@@ -8,8 +8,8 @@ const css_root = document.querySelector(":root");
 var col_right;
 var text_size;
 
-// Song metadata
-var title="", artist="", timestamp=null;
+// Song metadata and state
+var title="", artist="", timestamp=null, playing=false;
 
 // Text scrollers
 var title_scroller;
@@ -67,13 +67,23 @@ function receiveSongInfo() {
       try {
         // Parse JSON data
         data = JSON.parse(this.responseText);
+        console.log(data);
         title = data['title'];
         artist = data['artist'];
         timestamp = data['timestamp'];
+        playing = data['playing'];
+        song_changed = data['song_changed'];
 
-        // Preload album art and update
-        img_preloader.open("GET", "get-song-artwork");
-        img_preloader.send();
+        // Only update necessary parts based on what changed
+        if (song_changed) {       // New song is playing
+          // Preload album art and update
+          img_preloader.open("GET", "get-song-artwork");
+          img_preloader.send();
+        } else {                  // Only playback state changed
+          console.log("Playing: " + playing);
+          // Check for updated info again
+          setTimeout(getSongInfo, 250);
+        }
       } catch (error) {
         console.error("Could not parse server response, reconnecting in 5 seconds.");
         console.error(error);

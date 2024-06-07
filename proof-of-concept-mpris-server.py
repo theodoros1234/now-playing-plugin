@@ -6,11 +6,16 @@ PORT = 6969
 REQUEST_TIMEOUT = 20  # seconds
 POLLING_INTERVAL = 0.5  # seconds
 
+# NOTE: Some variables are stored as arrays to work around problems with accessing variables from other threads
+
 # Song info
-info = {"title": "", "artist": "", "timestamp": "0"}
+info = {"title": "", "artist": "", "playing": False, "timestamp": "0", "song_changed": True}
 info_lock = Condition();
 artwork = [b"", ""]
 
+# State
+timestamp_song = [0]
+timestamp_playback = [0]
 stopping = False
 
 # Connect to DBus session bus and grab the correct interface
@@ -43,17 +48,22 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
       # Extract timestamp from URL, if it was specified and it's valid
       timestamp = None
       try:
-        # Make sure the timestamp is a valid integer, but convert it back to a string afterwards.
-        # We're using a string due to the client's JS integer limitations.
-        timestamp = str(int(self.path[15:]))
+        # Attempt to parse the timestamp, or ignore it if it's invalid
+        timestamp = int(self.path[15:])
       except:
         pass
 
       json_encoded = None
       with info_lock:
-        if timestamp != info["timestamp"] or info_lock.wait(timeout=REQUEST_TIMEOUT):
+        if timestamp != timestamp_playback[0] or info_lock.wait(timeout=REQUEST_TIMEOUT):
+          # Check what changed since timestamp
+          info["song_changed"] = timestamp == None or timestamp < timestamp_song[0]
+          print("info['song_changed'] =", info["song_changed"])
           # Encode data to JSON
           json_encoded = json.dumps(info)
+          print("Client timestamp:", timestamp)
+          print("Song timestamp:", timestamp_song)
+          print("Playback timestamp:", timestamp_playback)
 
       # Send response
       if json_encoded == None:  # Song hasn't changed
@@ -95,6 +105,7 @@ def mprisWatcher():
   while not stopping:
     # Grab metadata from DBus
     metadata = interface.Get("org.mpris.MediaPlayer2.Player", "Metadata")
+    new_playback_state = str(interface.Get("org.mpris.MediaPlayer2.Player", "PlaybackStatus")) == 'Playing'
 
     # Parse metadata
     new_title = ""
@@ -113,14 +124,18 @@ def mprisWatcher():
           new_artist += ", "
         new_artist += str(i)
 
-    # Check if song info has changed
+    # Check if song info or playback state have changed
     with info_lock:
       if new_title != info["title"] or \
         new_artist != info["artist"]:
             # When it changes, update it with the new info
             info["title"] = new_title
             info["artist"] = new_artist
-            info["timestamp"] = str(time.time_ns())
+            info["playing"] = new_playback_state
+            timestamp = time.time_ns()
+            timestamp_song[0] = timestamp
+            timestamp_playback[0] = timestamp
+            info["timestamp"] = str(timestamp)
             # NOTE: Timestamp is stored as a string, due to client's JS int limitations
             # Print new info to console
             print()
@@ -136,7 +151,17 @@ def mprisWatcher():
             # Wake up HTTP threads waiting
             info_lock.notify_all()
 
-    # Wait 1s before continuing
+      elif new_playback_state != info["playing"]:
+        # Same song, but playback state changed
+        info["playing"] = new_playback_state
+        timestamp = time.time_ns()
+        timestamp_playback[0] = timestamp
+        info["timestamp"] = str(timestamp)
+        print("Playing:", new_playback_state)
+        # Wake up HTTP threads waiting
+        info_lock.notify_all()
+
+    # Wait 0.5s before continuing
     time.sleep(POLLING_INTERVAL)
 
 # Reads or downloads an image and returns tuple with binary data and mime type
