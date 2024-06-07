@@ -67,7 +67,6 @@ function receiveSongInfo() {
       try {
         // Parse JSON data
         data = JSON.parse(this.responseText);
-        console.log(data);
         title = data['title'];
         artist = data['artist'];
         timestamp = data['timestamp'];
@@ -80,7 +79,6 @@ function receiveSongInfo() {
           img_preloader.open("GET", "get-song-artwork");
           img_preloader.send();
         } else {                  // Only playback state changed
-          console.log("Playing: " + playing);
           // Check for updated info again
           setTimeout(getSongInfo, 250);
         }
