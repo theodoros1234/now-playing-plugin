@@ -2,11 +2,19 @@ const PORT = 6969;
 const TEXT_SCROLL_PAUSE_TIME = 4000;
 const TEXT_SCROLL_SPEED = 1.0;
 const TEXT_SCROLL_EDGEMASK_FADE_TIME = "250ms";
+const UI_HIDE_TIME = 1000;
+const UI_UNHIDE_TIME = 500;
+const ON_PAUSE_UI_HIDE_TIMEOUT = 5000;
 
 // HTML elements and related data
 const css_root = document.querySelector(":root");
+var widget_container;
 var col_right;
 var text_size;
+var ui_shown = true;
+var ui_should_be_shown = true;
+var ui_animation_timeout = null;
+var ui_hide_timeout = null;
 
 // Song metadata and state
 var title="", artist="", timestamp=null, playing=false;
@@ -34,6 +42,7 @@ function adjustTextSize() {
 // Initializes stuff when the page finishes loading
 function init() {
   col_right = document.getElementsByClassName("col-right")[0];
+  widget_container = document.getElementsByClassName("widget-container")[0];
   window.addEventListener("resize", adjustTextSize);
   adjustTextSize();
   getSongInfo();
@@ -73,11 +82,27 @@ function receiveSongInfo() {
         playing = data['playing'];
         song_changed = data['song_changed'];
 
-        // Only update necessary parts based on what changed
+        // Hide or unhide the UI based on the playback state
+        if (playing) {    // Playing
+          if (ui_hide_timeout !== null) {
+            // Unset hide timeout
+            clearTimeout(ui_hide_timeout);
+            ui_hide_timeout = null;
+          }
+          showUI();
+        } else {          // Paused
+          if (ui_hide_timeout === null) {
+            // Hide after being paused for this amount of time
+            ui_hide_timeout = setTimeout(hideUI, ON_PAUSE_UI_HIDE_TIMEOUT);
+          }
+        }
+
+        // Only update necessary parts of UI based on what changed
         if (song_changed) {       // New song is playing
           // Preload album art and update
           img_preloader.open("GET", "get-song-artwork");
           img_preloader.send();
+
         } else {                  // Only playback state changed
           // Check for updated info again
           setTimeout(getSongInfo, 250);
@@ -204,7 +229,7 @@ class TextScroller {
       this.#edgeMaskUnset();
       if (this.#pause_timeout !== null) {
         // Disable scrolling if we don't need to scroll and it was enabled (paused)
-        window.clearTimeout(this.#pause_timeout);
+        clearTimeout(this.#pause_timeout);
         this.#pause_timeout = null;
       }
     }
@@ -256,7 +281,7 @@ class TextScroller {
   #resetScroll() {
     this.#currently_scrolling = false;
     this.#resetScrollAnimation();
-    window.clearTimeout(this.#edgemask_timeout);
+    clearTimeout(this.#edgemask_timeout);
   }
 
   resetScroll() {
@@ -274,5 +299,59 @@ class TextScroller {
     } else {
       this.#edgeMaskUnset();
     }
+  }
+}
+
+// Hide UI with animation
+function hideUI() {
+  if (ui_should_be_shown) {
+    // Mark that we want to hide the UI
+    ui_should_be_shown = false;
+    // Check if there's already a UI animation currently being played
+    if (ui_animation_timeout === null) {
+      // If there isn't, then we can hide the UI
+      ui_shown = false;
+      widget_container.classList.add("hiding");
+      ui_animation_timeout = setTimeout(afterUIToggle, UI_HIDE_TIME);
+    }
+    // Otherwise, this will be handled by afterUIToggle()
+  }
+}
+
+// Show UI with animation
+function showUI() {
+  if (!ui_should_be_shown) {
+    // Mark that we want to show the UI
+    ui_should_be_shown = true;
+    // Check if there's already a UI animation currently being played
+    if (ui_animation_timeout === null) {
+      // If there isn't, then we can hide the UI
+      ui_shown = true;
+      widget_container.classList.remove("hidden");
+      widget_container.classList.add("unhiding");
+      ui_animation_timeout = setTimeout(afterUIToggle, UI_UNHIDE_TIME);
+    }
+    // Otherwise, this will be handled by afterUIToggle()
+  }
+}
+
+// Handle post-animation tasks after the UI is hidden or shown
+function afterUIToggle() {
+  // Finalize animation
+  if (ui_shown) {
+    widget_container.classList.remove("unhiding");
+  } else {
+    widget_container.classList.add("hidden");
+    widget_container.classList.remove("hiding");
+  }
+  // Handle any blocked requests done during the timeout
+  ui_animation_timeout = null;
+  if (ui_shown != ui_should_be_shown) {
+    // Reset ui_should_be_shown so the function we run knows that it has work to do
+    ui_should_be_shown = ui_shown;
+    if (ui_shown)
+      hideUI();
+    else
+      showUI();
   }
 }
