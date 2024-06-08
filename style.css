@@ -96,7 +96,7 @@ h1 {
   --text-size-zoom: 1;
   margin: 0px;
   font-size: var(--text-size);
-  font-weight: 700;
+  font-weight: 800;
   text-shadow: black calc(var(--text-size) * 0.075) calc(var(--text-size) * 0.075) calc(var(--text-size) * 0.125);
 }
 
@@ -104,8 +104,8 @@ h2 {
   --text-size-zoom: 0.66;
   margin: 0px;
   font-size: calc(var(--text-size) * var(--text-size-zoom));
-  font-weight: 400;
-  text-shadow: black calc(var(--text-size) * 0.0375) calc(var(--text-size) * 0.0375) calc(var(--text-size) * 0.075);
+  font-weight: 300;
+  text-shadow: black calc(var(--text-size) * 0.025) calc(var(--text-size) * 0.025) calc(var(--text-size) * 0.050);
 }
 
 .scrollback {
