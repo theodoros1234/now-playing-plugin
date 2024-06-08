@@ -4,12 +4,17 @@ const TEXT_SCROLL_SPEED = 1.0;
 const TEXT_SCROLL_EDGEMASK_FADE_TIME = "250ms";
 const UI_HIDE_TIME = 1000;
 const UI_UNHIDE_TIME = 500;
+const UI_NEXT_SONG_SWITCH_TIME = 250;
 const ON_PAUSE_UI_HIDE_TIMEOUT = 5000;
 
-// HTML elements and related data
+// DOM elements
 const css_root = document.querySelector(":root");
 var widget_container;
 var col_right;
+var art;
+var song_info;
+
+// State
 var text_size;
 var ui_shown = true;
 var ui_should_be_shown = true;
@@ -24,7 +29,7 @@ var title_scroller;
 var artist_scroller;
 
 // Other objects
-var http_handler = new XMLHttpRequest, img_preloader = new XMLHttpRequest, img_blob = null;
+var http_handler = new XMLHttpRequest, img_preloader = new XMLHttpRequest, img_blob = null, old_img_blob = null;
 http_handler.onerror = function() {
   console.warn("Connection error, reconnecting in 5 seconds.");
   setTimeout(getSongInfo, 5000);
@@ -41,13 +46,29 @@ function adjustTextSize() {
 
 // Initializes stuff when the page finishes loading
 function init() {
+  // Find DOM elements
   col_right = document.getElementsByClassName("col-right")[0];
   widget_container = document.getElementsByClassName("widget-container")[0];
+  art = Array.from(document.getElementsByClassName("art"));
+  song_info = Array.from(document.getElementsByClassName("song-info-container"));
+
+  // Create text scrollers
+  song_info[0].title_scroller = new TextScroller(song_info[0].children[0]);
+  song_info[0].artist_scroller = new TextScroller(song_info[0].children[1]);
+  song_info[1].title_scroller = new TextScroller(song_info[1].children[0]);
+  song_info[1].artist_scroller = new TextScroller(song_info[1].children[1]);
+
+  // Hide secondary DOM elements
+  art[1].classList.add("hidden");
+  song_info[1].classList.add("hidden");
+  song_info[1].title_scroller.disable();
+  song_info[1].artist_scroller.disable();
+
+  // Set up events
   window.addEventListener("resize", adjustTextSize);
   adjustTextSize();
   getSongInfo();
-  title_scroller = new TextScroller(document.getElementsByClassName('title-container')[0]);
-  artist_scroller = new TextScroller(document.getElementsByClassName('artist-container')[0]);
+
 }
 window.addEventListener("load", init);
 
@@ -130,30 +151,59 @@ function receiveSongInfo() {
 function updateSongInfo() {
   try {
     // Change HTML elements to reflect the new info
-    for (let element of document.getElementsByTagName("h1")) {
-      element.textContent = title;
-    }
-    for (let element of document.getElementsByTagName("h2")) {
-      element.textContent = artist;
-    }
-    for (let element of document.getElementsByClassName("art")) {
-      // Create blob from new image, and delete the old one.
-      old_img_blob = img_blob;
-      img_blob = URL.createObjectURL(this.response);
-      element.style.backgroundImage = 'url("' + img_blob + '")';
-      if (old_img_blob != null)
-        URL.revokeObjectURL(old_img_blob);
-    }
-    // Update text scrollers
-    title_scroller.resetScroll();
-    artist_scroller.resetScroll();
+
+    // Title
+    song_info[1].children[0].children[0].textContent = title;
+    song_info[1].children[0].children[1].textContent = title;
+    // Artist
+    song_info[1].children[1].children[0].textContent = artist;
+    song_info[1].children[1].children[1].textContent = artist;
+    // Artwork
+    old_img_blob = img_blob;
+    img_blob = URL.createObjectURL(this.response);
+    art[1].style.backgroundImage = 'url("' + img_blob + '")';
+
+    // Start switch animation
+    // Text
+    song_info[1].classList.remove("hidden");
+    song_info[1].title_scroller.enable();
+    song_info[1].artist_scroller.enable();
+    song_info[1].classList.add("new");
+    song_info[0].classList.add("old");
+    // Artwork
+    art[1].classList.remove("hidden");
+    art[1].classList.add("new");
+    art[0].classList.add("old");
+
   } catch (error) {
     console.error("Error updating UI.");
     console.error(error);
   }
 
+  setTimeout(updateSongInfoPostAnimation, UI_NEXT_SONG_SWITCH_TIME);
+}
+
+function updateSongInfoPostAnimation() {
+  // End switch animation
+  // Text
+  song_info[0].title_scroller.disable();
+  song_info[0].artist_scroller.disable();
+  song_info[0].classList.add("hidden");
+  song_info[0].classList.remove("old");
+  song_info[1].classList.remove("new");
+  song_info = song_info.reverse();
+  // Artwork
+  art[0].classList.add("hidden");
+  art[0].classList.remove("old");
+  art[1].classList.remove("new");
+  art = art.reverse();
+
+  // Invalidate old artwork
+  if (old_img_blob != null)
+    URL.revokeObjectURL(old_img_blob);
+
   // Check for updated info again
-  setTimeout(getSongInfo, 250);
+  getSongInfo();
 }
 
 // Handles scrolling text UI elements that don't fit in the viewport
@@ -169,6 +219,7 @@ class TextScroller {
   #currently_scrolling = false;
   #pause_timeout = null;
   #edgemask_timeout = null;
+  #enabled = true;
   pause_time = TEXT_SCROLL_PAUSE_TIME;
 
   constructor(text_container) {
@@ -202,6 +253,10 @@ class TextScroller {
   }
 
   resizeEvent() {
+    // Skip if scroller disabled
+    if (!this.#enabled)
+      return;
+
     // Get new font size
     this.#font_size = parseFloat(this.#computed_style.getPropertyValue("font-size"));
 
@@ -212,7 +267,7 @@ class TextScroller {
     this.#scroll_time = (this.#scroll_width + 3 * this.#font_size) / (this.#font_size * TEXT_SCROLL_SPEED);
 
     // Determine if scrolling is necessary
-    this.#needs_scroll = this.#main.scrollWidth > this.#main.clientWidth;
+    this.#needs_scroll = this.#scroll_width > this.#main.clientWidth;
 
     if (this.#currently_scrolling) {
       if (this.#needs_scroll) {
@@ -279,9 +334,9 @@ class TextScroller {
   }
 
   #resetScroll() {
+    clearTimeout(this.#edgemask_timeout);
     this.#currently_scrolling = false;
     this.#resetScrollAnimation();
-    clearTimeout(this.#edgemask_timeout);
   }
 
   resetScroll() {
@@ -297,6 +352,23 @@ class TextScroller {
       this.#edgeMaskSetRight();
       this.#pause_timeout = setTimeout(() => this.startScroll(), this.pause_time);
     } else {
+      this.#edgeMaskUnset();
+    }
+  }
+
+  enable() {
+    if (!this.#enabled) {
+      this.#enabled = true;
+      this.resetScroll();
+    }
+  }
+
+  disable() {
+    if (this.#enabled) {
+      this.#enabled = false;
+      clearTimeout(this.#pause_timeout);
+      this.#pause_timeout = null;
+      this.#resetScroll();
       this.#edgeMaskUnset();
     }
   }
@@ -325,11 +397,14 @@ function showUI() {
     ui_should_be_shown = true;
     // Check if there's already a UI animation currently being played
     if (ui_animation_timeout === null) {
-      // If there isn't, then we can hide the UI
+      // If there isn't, then we can show the UI
       ui_shown = true;
       widget_container.classList.remove("hidden");
       widget_container.classList.add("unhiding");
       ui_animation_timeout = setTimeout(afterUIToggle, UI_UNHIDE_TIME);
+      // Reset scroll animations
+      song_info[0].title_scroller.resetScroll();
+      song_info[0].artist_scroller.resetScroll();
     }
     // Otherwise, this will be handled by afterUIToggle()
   }
