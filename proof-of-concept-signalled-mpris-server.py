@@ -1,10 +1,12 @@
 #!/bin/python3
 import dbus, json, http.server, mimetypes, time, threading, os, requests
-from threading import Condition
+from dbus.mainloop.glib import DBusGMainLoop
+from threading import Lock, Condition
+from gi.repository import GLib
+
 
 PORT = 6969
 REQUEST_TIMEOUT = 20  # seconds
-POLLING_INTERVAL = 0.5  # seconds
 
 # NOTE: Some variables are stored as arrays to work around problems with accessing variables from other threads
 
@@ -16,12 +18,15 @@ artwork = [b"", ""]
 # State
 timestamp_song = [0]
 timestamp_playback = [0]
-stopping = False
+mpris_data_handler_lock = Lock()
 
-# Connect to DBus session bus and grab the correct interface
-session_bus = dbus.SessionBus()
-media_player = session_bus.get_object("org.mpris.MediaPlayer2.plasma-browser-integration", "/org/mpris/MediaPlayer2")
-interface = dbus.Interface(media_player, "org.freedesktop.DBus.Properties")
+# DBus session and interface (will be set after starting the DBus main loop)
+session_bus = None
+media_player = None
+interface = None
+
+# HTTP server
+http_server = [None]
 
 # Handles HTTP requests
 class RequestHandler(http.server.BaseHTTPRequestHandler):
@@ -58,12 +63,8 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         if timestamp != timestamp_playback[0] or info_lock.wait(timeout=REQUEST_TIMEOUT):
           # Check what changed since timestamp
           info["song_changed"] = timestamp == None or timestamp < timestamp_song[0]
-          print("info['song_changed'] =", info["song_changed"])
           # Encode data to JSON
           json_encoded = json.dumps(info)
-          print("Client timestamp:", timestamp)
-          print("Song timestamp:", timestamp_song)
-          print("Playback timestamp:", timestamp_playback)
 
       # Send response
       if json_encoded == None:  # Song hasn't changed
@@ -100,10 +101,11 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
       self.end_headers()
 
 
-# Watches MPRIS for new data
-def mprisWatcher():
-  while not stopping:
-    # Grab metadata from DBus
+# Gets new MPRIS data
+def mprisGetNewData(*args, **kwargs):
+  print("Getting new data from MPRIS")
+  with mpris_data_handler_lock:
+    # Grab metadata from DBus, ignoring the signal data
     metadata = interface.Get("org.mpris.MediaPlayer2.Player", "Metadata")
     new_playback_state = str(interface.Get("org.mpris.MediaPlayer2.Player", "PlaybackStatus")) == 'Playing'
 
@@ -161,9 +163,6 @@ def mprisWatcher():
         # Wake up HTTP threads waiting
         info_lock.notify_all()
 
-    # Wait 0.5s before continuing
-    time.sleep(POLLING_INTERVAL)
-
 # Reads or downloads an image and returns tuple with binary data and mime type
 def getImage(uri):
   # Determine URI protocol
@@ -193,20 +192,44 @@ def getImage(uri):
     # Return blank data on unrecognized protocol
     return [b"", ""]
 
-# Main
-if __name__ == "__main__":
-  # Start info watcher thread
-  watcher = threading.Thread(target=mprisWatcher)
-  watcher.start()
-
-  # Start HTTP server
+# HTTP server thread
+def HTTPServerThread():
   try:
     with http.server.ThreadingHTTPServer(('127.0.0.1', PORT), RequestHandler) as server:
+      http_server[0] = server
       print("Listening at", PORT)
       server.serve_forever()
-  except KeyboardInterrupt:
-    print("Received keyboard interrupt")
+  except Exception as e:
+    print("HTTP server error:", e)
+    exit(1)
 
-  # Signal the watcher thread to stop
+# Main
+if __name__ == "__main__":
+  # Connect to DBus session bus and grab the correct interface
+  DBusGMainLoop(set_as_default=True)
+  session_bus = dbus.SessionBus()
+  media_player = session_bus.get_object("org.mpris.MediaPlayer2.plasma-browser-integration", "/org/mpris/MediaPlayer2")
+  interface = dbus.Interface(media_player, "org.freedesktop.DBus.Properties")
+  media_player.connect_to_signal("PropertiesChanged", mprisGetNewData, dbus_interface="org.freedesktop.DBus.Properties")
+
+  # Start HTTP server
+  http_server_thread = threading.Thread(target=HTTPServerThread)
+  http_server_thread.start()
+
+  # Get initial song info from MPRIS
+  mprisGetNewData()
+
+  # NOTE: It's rare but possible for new song data to arrive after getting the initial song info, but
+  #       before the GLib main loop is started, which handles DBus signals. This might lead to the
+  #       wrong data being sent to clients. Playing/pausing or changing the song should fix this.
+
+  # Start GLib main loop (required for DBus signals)
+  try:
+    GLib.MainLoop().run()
+  except KeyboardInterrupt:
+    pass
+
+  # Stop
   print("Stopping")
-  stopping = True
+  http_server[0].shutdown()
+
