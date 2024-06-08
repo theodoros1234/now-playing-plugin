@@ -88,8 +88,9 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         response_image = artwork[0]
         response_mimetype = artwork[1]
       # Send data back to client
-      self.send_response(200)
-      self.send_header("Content-Type", response_mimetype)
+      self.send_response(200)                                                         # Response: 200 OK
+      self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our music
+      self.send_header("Content-Type", response_mimetype)                             # Image format we're sending
       self.end_headers()
       self.wfile.write(response_image)
 
