@@ -25,7 +25,7 @@ body {
   top: 0px;
   padding: var(--padding);
   margin: var(--margin);
-  border-radius: 30px;
+  border-radius: 35px;
 }
 
 .col-left {
