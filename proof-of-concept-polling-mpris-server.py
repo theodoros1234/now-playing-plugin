@@ -114,12 +114,15 @@ def mprisWatcher():
     if metadata.get("mpris:artUrl") != None:
       art_url = str(metadata.get("mpris:artUrl"))
     artist_list = metadata.get("xesam:artist")
-    # Concatenate all artists into one string
+    # If there's an array of artists, concatenate all their names into one string
     if artist_list != None:
-      for i in artist_list:
-        if len(new_artist) != 0:
-          new_artist += ", "
-        new_artist += str(i)
+      if type(artist_list) == dbus.String:
+        new_artist = str(artist_list)
+      elif type(artist_list) == dbus.Array:
+        for i in artist_list:
+          if len(new_artist) != 0:
+            new_artist += ", "
+          new_artist += str(i)
 
     # Check if song info or playback state have changed
     with info_lock:
