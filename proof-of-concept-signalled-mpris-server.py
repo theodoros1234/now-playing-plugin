@@ -35,9 +35,9 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     if self.path == "/script.js" or self.path == "/ui.html" or self.path == "/style.css":
       # Make sure the file exists
       if os.path.exists(self.path[1:]):
-        self.send_response(200)                                                   # Response: 200 OK
-        self.send_header("Access-Control-Allow-Origin", "http://localhost"+str(PORT)) # Deny other sites from snooping on our code
-        self.send_header("Content-Type", mimetypes.guess_type(self.path)[0])         # Figure out what file type we're sending
+        self.send_response(200)                                                         # Response: 200 OK
+        self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our code
+        self.send_header("Content-Type", mimetypes.guess_type(self.path)[0])            # Figure out what file type we're sending
         self.end_headers()
 
         with open(self.path[1:], "rb") as f:
