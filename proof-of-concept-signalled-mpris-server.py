@@ -8,16 +8,14 @@ from gi.repository import GLib
 PORT = 6969
 REQUEST_TIMEOUT = 20  # seconds
 
-# NOTE: Some variables are stored as arrays to work around problems with accessing variables from other threads
-
 # Song info
 info = {"title": "", "artist": "", "playing": False, "timestamp": "0", "song_changed": True}
 info_lock = Condition();
-artwork = [b"", ""]
+artwork = (b"", "")
 
 # State
-timestamp_song = [0]
-timestamp_playback = [0]
+timestamp_song = 0
+timestamp_playback = 0
 mpris_data_handler_lock = Lock()
 
 # DBus session and interface (will be set after starting the DBus main loop)
@@ -26,11 +24,12 @@ media_player = None
 interface = None
 
 # HTTP server
-http_server = [None]
+http_server = None
 
 # Handles HTTP requests
 class RequestHandler(http.server.BaseHTTPRequestHandler):
   def do_GET(self):
+    global artwork, timestamp_song, timestamp_playback, info, info_lock
     # Request is for one of the code files
     if self.path == "/script.js" or self.path == "/ui.html" or self.path == "/style.css":
       # Make sure the file exists
@@ -60,9 +59,9 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
       json_encoded = None
       with info_lock:
-        if timestamp != timestamp_playback[0] or info_lock.wait(timeout=REQUEST_TIMEOUT):
+        if timestamp != timestamp_playback or info_lock.wait(timeout=REQUEST_TIMEOUT):
           # Check what changed since timestamp
-          info["song_changed"] = timestamp == None or timestamp < timestamp_song[0]
+          info["song_changed"] = timestamp == None or timestamp < timestamp_song
           # Encode data to JSON
           json_encoded = json.dumps(info)
 
@@ -104,6 +103,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
 # Gets new MPRIS data
 def mprisGetNewData(*args, **kwargs):
+  global artwork, timestamp_song, timestamp_playback, info, info_lock, mpris_data_handler_lock
   print("Getting new data from MPRIS")
   with mpris_data_handler_lock:
     # Grab metadata from DBus, ignoring the signal data
@@ -139,8 +139,8 @@ def mprisGetNewData(*args, **kwargs):
             info["artist"] = new_artist
             info["playing"] = new_playback_state
             timestamp = time.time_ns()
-            timestamp_song[0] = timestamp
-            timestamp_playback[0] = timestamp
+            timestamp_song = timestamp
+            timestamp_playback = timestamp
             info["timestamp"] = str(timestamp)
             # NOTE: Timestamp is stored as a string, due to client's JS int limitations
             # Print new info to console
@@ -151,9 +151,9 @@ def mprisGetNewData(*args, **kwargs):
             print()
             # Download new artwork (if it exists)
             if (art_url == ""):
-              artwork[0], artwork[1] = [b"", ""]
+              artwork = (b"", "")
             else:
-              artwork[0], artwork[1] = getImage(art_url)
+              artwork = getImage(art_url)
             # Wake up HTTP threads waiting
             info_lock.notify_all()
 
@@ -161,7 +161,7 @@ def mprisGetNewData(*args, **kwargs):
         # Same song, but playback state changed
         info["playing"] = new_playback_state
         timestamp = time.time_ns()
-        timestamp_playback[0] = timestamp
+        timestamp_playback = timestamp
         info["timestamp"] = str(timestamp)
         print("Playing:", new_playback_state)
         # Wake up HTTP threads waiting
@@ -175,10 +175,10 @@ def getImage(uri):
     response = requests.get(uri)
     if (response.status_code == 200):
       # Successful request, returns data and mime type
-      return [response.content, response.headers['Content-Type']]
+      return (response.content, response.headers['Content-Type'])
     else:
       # Error, returns empty data
-      return [b"", ""]
+      return (b"", "")
 
   elif uri[:7] == "file://":
     # Local file
@@ -188,19 +188,20 @@ def getImage(uri):
         data = f.read()
     except:
       # Return blank data on error
-      return [b"", ""]
+      return (b"", "")
     # Otherwise, return data and guessed mime type
-    return [data, mimetypes.guess_type(uri)]
+    return (data, mimetypes.guess_type(uri))
 
   else:
     # Return blank data on unrecognized protocol
-    return [b"", ""]
+    return (b"", "")
 
 # HTTP server thread
 def HTTPServerThread():
+  global http_server
   try:
     with http.server.ThreadingHTTPServer(('127.0.0.1', PORT), RequestHandler) as server:
-      http_server[0] = server
+      http_server = server
       print("Listening at", PORT)
       server.serve_forever()
   except Exception as e:
@@ -235,5 +236,5 @@ if __name__ == "__main__":
 
   # Stop
   print("Stopping")
-  http_server[0].shutdown()
+  http_server.shutdown()
 
