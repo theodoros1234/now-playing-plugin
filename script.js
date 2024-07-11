@@ -30,12 +30,19 @@ var artist_scroller;
 
 // Other objects
 var http_handler = new XMLHttpRequest, img_preloader = new XMLHttpRequest, img_blob = null, old_img_blob = null;
+http_handler.timeout = 30000;
 http_handler.onerror = function() {
   console.warn("Connection error, reconnecting in 5 seconds.");
   setTimeout(getSongInfo, 5000);
 };
+http_handler.ontimeout = function() {
+  console.warn("Connection timeout, retrying.");
+  getSongInfo();
+};
+img_preloader.timeout = 5000;
 img_preloader.onload = updateSongInfo;
 img_preloader.onerror = updateSongInfo;
+img_preloader.ontimeout = updateSongInfo;
 img_preloader.responseType = "blob";
 
 // Adjusts text size on window resize
@@ -160,8 +167,16 @@ function updateSongInfo() {
     song_info[1].children[1].children[1].textContent = artist;
     // Artwork
     old_img_blob = img_blob;
-    img_blob = URL.createObjectURL(this.response);
-    art[1].style.backgroundImage = 'url("' + img_blob + '")';
+    if (this.status == 200) {
+      // Artwork was received from server, use that.
+      img_blob = URL.createObjectURL(this.response);
+      art[1].style.backgroundImage = 'url("' + img_blob + '")';
+    } else {
+      // Error getting artwork from server, don't show any artwork.
+      console.warn("Couldn't get artwork from server.");
+      img_blob = null;
+      art[1].style.backgroundImage = '';
+    }
 
     // Start switch animation
     // Text
