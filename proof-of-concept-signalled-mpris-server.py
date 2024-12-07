@@ -133,7 +133,8 @@ def mprisGetNewData(*args, **kwargs):
     # Check if song info or playback state have changed
     with info_lock:
       if new_title != info["title"] or \
-        new_artist != info["artist"]:
+        new_artist != info["artist"] or \
+        artwork != getImage(art_url):
             # When it changes, update it with the new info
             info["title"] = new_title
             info["artist"] = new_artist
@@ -213,7 +214,7 @@ if __name__ == "__main__":
   # Connect to DBus session bus and grab the correct interface
   DBusGMainLoop(set_as_default=True)
   session_bus = dbus.SessionBus()
-  media_player = session_bus.get_object("org.mpris.MediaPlayer2.plasma-browser-integration", "/org/mpris/MediaPlayer2")
+  media_player = session_bus.get_object("org.mpris.MediaPlayer2.chromium.instance4783", "/org/mpris/MediaPlayer2")
   interface = dbus.Interface(media_player, "org.freedesktop.DBus.Properties")
   media_player.connect_to_signal("PropertiesChanged", mprisGetNewData, dbus_interface="org.freedesktop.DBus.Properties")
 
