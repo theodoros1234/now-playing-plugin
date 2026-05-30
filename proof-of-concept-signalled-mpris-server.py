@@ -1,5 +1,5 @@
 #!/bin/python3
-import dbus, json, http.server, mimetypes, time, threading, os, requests
+import dbus, json, http.server, mimetypes, time, threading, os, requests, urllib.parse
 from dbus.mainloop.glib import DBusGMainLoop
 from threading import Lock, Condition
 from gi.repository import GLib
@@ -8,6 +8,10 @@ from gi.repository import GLib
 PORT = 6969
 REQUEST_TIMEOUT = 20    # seconds
 POST_CHANGE_WAIT = 1    # seconds
+DBUS_SERVICE_PREFIXES = [
+  "org.mpris.MediaPlayer2.chromium.",
+  "org.mpris.MediaPlayer2.vlc"
+]
 
 # Song info
 info = {"title": "", "artist": "", "playing": False, "timestamp": "0", "change_level": "song", "art_url": ""}
@@ -220,7 +224,7 @@ def getImage(uri):
     # Local file
     data = None
     try:
-      with open(uri[7:], "rb") as f:
+      with open(urllib.parse.unquote(uri[7:]), "rb") as f:
         data = f.read()
     except:
       # Return blank data on error
@@ -246,10 +250,35 @@ def HTTPServerThread():
 
 # Main
 if __name__ == "__main__":
-  # Connect to DBus session bus and grab the correct interface
+  # Connect to DBus session bus
   DBusGMainLoop(set_as_default=True)
   session_bus = dbus.SessionBus()
-  media_player = session_bus.get_object("org.mpris.MediaPlayer2.chromium.instance9655", "/org/mpris/MediaPlayer2")
+
+  # Find the service we want
+  list_names = dbus.Interface(
+    session_bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus"),
+    "org.freedesktop.DBus") \
+      .get_dbus_method("ListNames")
+  dbus_services = list_names()
+
+  wanted_service_name = None
+  for service in dbus_services:
+    name = str(service)
+    for prefix in DBUS_SERVICE_PREFIXES:
+      if name.startswith(prefix):
+        wanted_service_name = name
+        break
+    if wanted_service_name != None:
+      break
+
+  if wanted_service_name == None:
+    print("ERROR: Couldn't find a DBus service that matches the set criteria")
+    exit(1)
+  else:
+    print("Connecting to DBus service", wanted_service_name)
+
+  # Connect to that interface
+  media_player = session_bus.get_object(wanted_service_name, "/org/mpris/MediaPlayer2")
   interface = dbus.Interface(media_player, "org.freedesktop.DBus.Properties")
   media_player.connect_to_signal("PropertiesChanged", mprisGetNewData, dbus_interface="org.freedesktop.DBus.Properties")
 
