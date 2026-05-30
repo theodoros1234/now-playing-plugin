@@ -200,6 +200,14 @@ h2 {
   animation: 250ms ease-in-out forwards art-switch-new;
 }
 
+.art.old-fade {
+  animation: 250ms ease-in-out forwards art-switch-old-fade;
+}
+
+.art.new-fade {
+  animation: 250ms ease-in-out forwards art-switch-new-fade;
+}
+
 .song-info-container.old {
   animation: 250ms ease-in-out forwards text-switch-old;
 }
@@ -228,6 +236,26 @@ h2 {
   to {
     opacity: 100%;
     background-position-x: center;
+    z-index: 11;
+  }
+}
+
+@keyframes art-switch-old-fade {
+  from {
+    z-index: 10;
+  }
+  to {
+    z-index: 10;
+  }
+}
+
+@keyframes art-switch-new-fade {
+  from {
+    opacity: 0%;
+    z-index: 11;
+  }
+  to {
+    opacity: 100%;
     z-index: 11;
   }
 }

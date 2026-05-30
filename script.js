@@ -22,7 +22,7 @@ var ui_animation_timeout = null;
 var ui_hide_timeout = null;
 
 // Song metadata and state
-var title="", artist="", timestamp=null, playing=false;
+var title="", artist="", timestamp=null, playing=false, change_level="song";
 
 // Text scrollers
 var title_scroller;
@@ -108,7 +108,7 @@ function receiveSongInfo() {
         artist = data['artist'];
         timestamp = data['timestamp'];
         playing = data['playing'];
-        song_changed = data['song_changed'];
+        change_level = data['change_level'];
 
         // Hide or unhide the UI based on the playback state
         if (playing) {    // Playing
@@ -126,7 +126,7 @@ function receiveSongInfo() {
         }
 
         // Only update necessary parts of UI based on what changed
-        if (song_changed) {       // New song is playing
+        if (change_level !== "playback") {  // New song is playing or artwork changed
           // Preload album art and update
           img_preloader.open("GET", "get-song-artwork");
           img_preloader.send();
@@ -157,38 +157,55 @@ function receiveSongInfo() {
 // Updates HTML elements to reflect new song info
 function updateSongInfo() {
   try {
-    // Change HTML elements to reflect the new info
-
-    // Title
-    song_info[1].children[0].children[0].textContent = title;
-    song_info[1].children[0].children[1].textContent = title;
-    // Artist
-    song_info[1].children[1].children[0].textContent = artist;
-    song_info[1].children[1].children[1].textContent = artist;
-    // Artwork
+    // Handle received artwork
     old_img_blob = img_blob;
     if (this.status == 200) {
       // Artwork was received from server, use that.
       img_blob = URL.createObjectURL(this.response);
-      art[1].style.backgroundImage = 'url("' + img_blob + '")';
     } else {
       // Error getting artwork from server, don't show any artwork.
       console.warn("Couldn't get artwork from server.");
       img_blob = null;
-      art[1].style.backgroundImage = '';
     }
 
-    // Start switch animation
-    // Text
-    song_info[1].classList.remove("hidden");
-    song_info[1].title_scroller.enable();
-    song_info[1].artist_scroller.enable();
-    song_info[1].classList.add("new");
-    song_info[0].classList.add("old");
-    // Artwork
-    art[1].classList.remove("hidden");
-    art[1].classList.add("new");
-    art[0].classList.add("old");
+    // Change HTML elements to reflect the new info
+
+    if (change_level === "song") {
+      // Title
+      song_info[1].children[0].children[0].textContent = title;
+      song_info[1].children[0].children[1].textContent = title;
+      // Artist
+      song_info[1].children[1].children[0].textContent = artist;
+      song_info[1].children[1].children[1].textContent = artist;
+      // Artwork
+      if (img_blob !== null)
+        art[1].style.backgroundImage = 'url("' + img_blob + '")';
+      else
+        art[1].style.backgroundImage = '';
+
+      // Start switch animation
+      // Text
+      song_info[1].classList.remove("hidden");
+      song_info[1].title_scroller.enable();
+      song_info[1].artist_scroller.enable();
+      song_info[1].classList.add("new");
+      song_info[0].classList.add("old");
+      // Artwork
+      art[1].classList.remove("hidden");
+      art[1].classList.add("new");
+      art[0].classList.add("old");
+
+    } else if (change_level === "artwork") {
+      if (img_blob !== null)
+        art[1].style.backgroundImage = 'url("' + img_blob + '")';
+      else
+        art[1].style.backgroundImage = '';
+
+      // Start fade animation (prevents flash)
+      art[1].classList.remove("hidden");
+      art[1].classList.add("new-fade");
+      art[0].classList.add("old-fade");
+    }
 
   } catch (error) {
     console.error("Error updating UI.");
@@ -200,18 +217,26 @@ function updateSongInfo() {
 
 function updateSongInfoPostAnimation() {
   // End switch animation
-  // Text
-  song_info[0].title_scroller.disable();
-  song_info[0].artist_scroller.disable();
-  song_info[0].classList.add("hidden");
-  song_info[0].classList.remove("old");
-  song_info[1].classList.remove("new");
-  song_info = song_info.reverse();
-  // Artwork
-  art[0].classList.add("hidden");
-  art[0].classList.remove("old");
-  art[1].classList.remove("new");
-  art = art.reverse();
+  if (change_level === "song") {
+    // Text
+    song_info[0].title_scroller.disable();
+    song_info[0].artist_scroller.disable();
+    song_info[0].classList.add("hidden");
+    song_info[0].classList.remove("old");
+    song_info[1].classList.remove("new");
+    song_info = song_info.reverse();
+    // Artwork
+    art[0].classList.add("hidden");
+    art[0].classList.remove("old");
+    art[1].classList.remove("new");
+    art = art.reverse();
+
+  } else if (change_level === "artwork") {
+    art[0].classList.add("hidden");
+    art[0].classList.remove("old-fade");
+    art[1].classList.remove("new-fade");
+    art = art.reverse();
+  }
 
   // Invalidate old artwork
   if (old_img_blob != null)

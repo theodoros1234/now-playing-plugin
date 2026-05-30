@@ -6,15 +6,17 @@ from gi.repository import GLib
 
 
 PORT = 6969
-REQUEST_TIMEOUT = 20  # seconds
+REQUEST_TIMEOUT = 20    # seconds
+POST_CHANGE_WAIT = 1    # seconds
 
 # Song info
-info = {"title": "", "artist": "", "playing": False, "timestamp": "0", "song_changed": True}
+info = {"title": "", "artist": "", "playing": False, "timestamp": "0", "change_level": "song", "art_url": ""}
 info_lock = Condition();
 artwork = (b"", "")
 
 # State
 timestamp_song = 0
+timestamp_artwork = 0
 timestamp_playback = 0
 mpris_data_handler_lock = Lock()
 
@@ -29,81 +31,97 @@ http_server = None
 # Handles HTTP requests
 class RequestHandler(http.server.BaseHTTPRequestHandler):
   def do_GET(self):
-    global artwork, timestamp_song, timestamp_playback, info, info_lock
-    # Request is for one of the code files
-    if self.path == "/script.js" or self.path == "/ui.html" or self.path == "/style.css":
-      # Make sure the file exists
-      if os.path.exists(self.path[1:]):
+    global artwork, timestamp_song, timestamp_artwork, timestamp_playback, info, info_lock
+
+    try:
+      # Request is for one of the code files
+      if self.path == "/script.js" or self.path == "/ui.html" or self.path == "/style.css":
+        # Make sure the file exists
+        if os.path.exists(self.path[1:]):
+          self.send_response(200)                                                         # Response: 200 OK
+          self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our code
+          self.send_header("Content-Type", mimetypes.guess_type(self.path)[0])            # Figure out what file type we're sending
+          self.end_headers()
+
+          with open(self.path[1:], "rb") as f:
+            self.wfile.write(f.read())
+
+        # 404 Not Found if the file doesn't exist
+        else:
+          self.send_response(404)
+          self.end_headers()
+
+      # Request is for song data
+      elif self.path == "/get-song-info" or self.path[:15] == "/get-song-info?":
+        # Extract timestamp from URL, if it was specified and it's valid
+        timestamp = None
+        try:
+          # Attempt to parse the timestamp, or ignore it if it's invalid
+          timestamp = int(self.path[15:])
+        except:
+          pass
+
+        json_encoded = None
+        with info_lock:
+          if timestamp != timestamp_playback or info_lock.wait(timeout=REQUEST_TIMEOUT):
+            # Wait for any other quick changes
+            if timestamp != None:
+              info_lock.release()
+              time.sleep(POST_CHANGE_WAIT)
+              info_lock.acquire()
+            # Check what changed since timestamp
+            if timestamp == None or timestamp < timestamp_song:
+              info["change_level"] = "song"
+            elif timestamp < timestamp_artwork:
+              info["change_level"] = "artwork"
+            else:
+              info["change_level"] = "playback"
+            # Encode data to JSON
+            json_encoded = json.dumps(info)
+
+        # Send response
+        if json_encoded == None:  # Song hasn't changed
+          self.send_response(304)                                                         # Response: 304 Not Modified
+          self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our music
+          self.send_header("Content-Type", "text/json")                                   # We're sending JSON
+          self.end_headers()
+        else:                     # Song has changed
+          self.send_response(200)                                                         # Response: 200 OK
+          self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our music
+          self.send_header("Content-Type", "text/json")                                   # We're sending JSON
+          self.end_headers()
+          self.wfile.write(json_encoded.encode("utf-8"))
+
+      # Request is for song artwork
+      elif self.path == "/get-song-artwork":
+        response_image = None
+        response_mimetype = None
+        # Grab artwork
+        with info_lock:
+          response_image = artwork[0]
+          response_mimetype = artwork[1]
+        # Send data back to client
         self.send_response(200)                                                         # Response: 200 OK
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our code
-        self.send_header("Content-Type", mimetypes.guess_type(self.path)[0])            # Figure out what file type we're sending
+        self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our music
+        self.send_header("Content-Type", response_mimetype)                             # Image format we're sending
         self.end_headers()
+        self.wfile.write(response_image)
 
-        with open(self.path[1:], "rb") as f:
-          self.wfile.write(f.read())
 
-      # 404 Not Found if the file doesn't exist
+      # Request is invalid
       else:
         self.send_response(404)
+        self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT)) # Deny other sites from snooping on our stuff
         self.end_headers()
 
-    # Request is for song data
-    elif self.path == "/get-song-info" or self.path[:15] == "/get-song-info?":
-      # Extract timestamp from URL, if it was specified and it's valid
-      timestamp = None
-      try:
-        # Attempt to parse the timestamp, or ignore it if it's invalid
-        timestamp = int(self.path[15:])
-      except:
-        pass
 
-      json_encoded = None
-      with info_lock:
-        if timestamp != timestamp_playback or info_lock.wait(timeout=REQUEST_TIMEOUT):
-          # Check what changed since timestamp
-          info["song_changed"] = timestamp == None or timestamp < timestamp_song
-          # Encode data to JSON
-          json_encoded = json.dumps(info)
-
-      # Send response
-      if json_encoded == None:  # Song hasn't changed
-        self.send_response(304)                                                         # Response: 304 Not Modified
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our music
-        self.send_header("Content-Type", "text/json")                                   # We're sending JSON
-        self.end_headers()
-      else:                     # Song has changed
-        self.send_response(200)                                                         # Response: 200 OK
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our music
-        self.send_header("Content-Type", "text/json")                                   # We're sending JSON
-        self.end_headers()
-        self.wfile.write(json_encoded.encode("utf-8"))
-
-    # Request is for song artwork
-    elif self.path == "/get-song-artwork":
-      response_image = None
-      response_mimetype = None
-      # Grab artwork
-      with info_lock:
-        response_image = artwork[0]
-        response_mimetype = artwork[1]
-      # Send data back to client
-      self.send_response(200)                                                         # Response: 200 OK
-      self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT))  # Deny other sites from snooping on our music
-      self.send_header("Content-Type", response_mimetype)                             # Image format we're sending
-      self.end_headers()
-      self.wfile.write(response_image)
-
-
-    # Request is invalid
-    else:
-      self.send_response(404)
-      self.send_header("Access-Control-Allow-Origin", "http://localhost:"+str(PORT)) # Deny other sites from snooping on our stuff
-      self.end_headers()
+    except BrokenPipeError:
+      print("ERROR: Client disconnected")
 
 
 # Gets new MPRIS data
 def mprisGetNewData(*args, **kwargs):
-  global artwork, timestamp_song, timestamp_playback, info, info_lock, mpris_data_handler_lock
+  global artwork, timestamp_song, timestamp_artwork, timestamp_playback, info, info_lock, mpris_data_handler_lock
   print("Getting new data from MPRIS")
   with mpris_data_handler_lock:
     # Grab metadata from DBus, ignoring the signal data
@@ -140,6 +158,7 @@ def mprisGetNewData(*args, **kwargs):
             info["playing"] = new_playback_state
             timestamp = time.time_ns()
             timestamp_song = timestamp
+            timestamp_artwork = timestamp
             timestamp_playback = timestamp
             info["timestamp"] = str(timestamp)
             # NOTE: Timestamp is stored as a string, due to client's JS int limitations
@@ -150,12 +169,29 @@ def mprisGetNewData(*args, **kwargs):
             print("Album art URL:", art_url)
             print()
             # Download new artwork (if it exists)
+            info["art_url"] = art_url
             if (art_url == ""):
               artwork = (b"", "")
             else:
               artwork = getImage(art_url)
             # Wake up HTTP threads waiting
             info_lock.notify_all()
+
+      elif art_url != info["art_url"]:
+        info["playing"] = new_playback_state
+        timestamp = time.time_ns()
+        timestamp_artwork = timestamp
+        timestamp_playback = timestamp
+        info["timestamp"] = str(timestamp)
+        print("Updated album art URL:", art_url)
+        # Download new artwork (if it exists)
+        info["art_url"] = art_url
+        if (art_url == ""):
+          artwork = (b"", "")
+        else:
+          artwork = getImage(art_url)
+        # Wake up HTTP threads waiting
+        info_lock.notify_all()
 
       elif new_playback_state != info["playing"]:
         # Same song, but playback state changed
@@ -213,7 +249,7 @@ if __name__ == "__main__":
   # Connect to DBus session bus and grab the correct interface
   DBusGMainLoop(set_as_default=True)
   session_bus = dbus.SessionBus()
-  media_player = session_bus.get_object("org.mpris.MediaPlayer2.plasma-browser-integration", "/org/mpris/MediaPlayer2")
+  media_player = session_bus.get_object("org.mpris.MediaPlayer2.chromium.instance9655", "/org/mpris/MediaPlayer2")
   interface = dbus.Interface(media_player, "org.freedesktop.DBus.Properties")
   media_player.connect_to_signal("PropertiesChanged", mprisGetNewData, dbus_interface="org.freedesktop.DBus.Properties")
 
